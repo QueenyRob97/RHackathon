@@ -11,11 +11,10 @@ library(mosaic)
 
 bloc_len <- nrow(subdata)
 
-boot_dta <- do(n) * sample(subdata)
+boot_dta <- bind_rows(replicate(n, subdata %>% sample(), simplify=F))
 
 boot_dta$id <- 
   rep(seq(1, 1 + nrow(boot_dta) %/% bloc_len), each = bloc_len, length.out = nrow(boot_dta))
-
 
 start_time <- Sys.time()
 reg.fun <- function(formula, data, design){
@@ -98,6 +97,8 @@ boot_dta$ac_disease <-
 
 results <- by(boot_dta, boot_dta[,"id"], summary)
               #, function(x) boot(boot_dta, reg.fun, R = n))
+
+
 
 nuke.boot <- boot(boot_dta, reg.fun, R = n)
 
