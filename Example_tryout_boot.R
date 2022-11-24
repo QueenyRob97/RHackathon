@@ -1,5 +1,4 @@
 library(boot)
-
 reg.fun <- function(dta, design){
   reg_LBP <- svyglm(Av_Tot_cost ~ OA ,
                   design = design)
