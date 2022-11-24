@@ -2,27 +2,30 @@ library(boot)
 library(dplyr)
 load("tot_healthexp.RData")
 
-n <- 100
+n <- 5
 subdata <- dta[, c("hh_cluster", "provw", "wfin", "LBP", "NKP", "OA", "RA",
                    "hc04", "hc_01", "ET_1", "PA08_2", "TA07_3", "NS_2", "Av_Tot_cost")]
 
-sampled.data <- sample(subdata, 10, replace=TRUE)
-dta_boot <-
-  dta[sample(nrow(dta), replace = TRUE), ]
+library(mosaic)
+
+
+bloc_len <- nrow(subdata)
+
+boot_dta <- do(n) * sample(subdata)
+
+boot_dta$id <- 
+  rep(seq(1, 1 + nrow(boot_dta) %/% bloc_len), each = bloc_len, length.out = nrow(boot_dta))
 
 
 start_time <- Sys.time()
 reg.fun <- function(formula, data, design){
-
-  #dta_boot <-
-    #dta[sample(nrow(dta), replace = TRUE), ]
-
+  
   ## create hisdesign
   hisdesign_boot <-
     svydesign(id = ~hh_cluster,
               strata = ~provw,
               weights = ~wfin,
-              data = subdata)
+              data = boot_dta)
 
   hisdesign_boot$variables$LBP <-
     relevel(hisdesign_boot$variables$LBP, "No")
@@ -58,41 +61,47 @@ reg.fun <- function(formula, data, design){
            family = quasipoisson(link = "log"))
 
 
-  newdata <- within(subdata, {OA <- "No"})
+  newdata <- within(boot_dta, {OA <- "No"})
 
   prob_LBP <- predict(reg_LBP, newdata = newdata, type = "response")
-  subdata$prob_LBP <- NA
-  subdata[names(prob_LBP), "prob_LBP"] <- prob_LBP
-  subdata$pred_LBP <- rbinom(9841, 1, subdata$prob_LBP)
+  boot_dta$prob_LBP <- NA
+  boot_dta[names(prob_LBP), "prob_LBP"] <- prob_LBP
+  boot_dta$pred_LBP <- rbinom(9841, 1, boot_dta$prob_LBP)
 
-  subdata$pred_LBP <- ifelse(subdata$pred_LBP == 1, "Yes", "No")
+  boot_dta$pred_LBP <- ifelse(boot_dta$pred_LBP == 1, "Yes", "No")
 
 # #change LBP to predictions
-newdata <- within(subdata, {LBP <- pred_LBP})
+newdata <- within(boot_dta, {LBP <- pred_LBP})
 prob_NKP <- predict(reg_NKP, newdata = newdata, type = "response")
 
-subdata$prob_NKP <- NA
-subdata[names(prob_NKP), "prob_NKP"] <- prob_NKP
-subdata$pred_NKP <- rbinom(9841, 1, subdata$prob_NKP)
+boot_dta$prob_NKP <- NA
+boot_dta[names(prob_NKP), "prob_NKP"] <- prob_NKP
+boot_dta$pred_NKP <- rbinom(9841, 1, boot_dta$prob_NKP)
 
-subdata$pred_NKP <- ifelse(subdata$pred_NKP == 1, "Yes", "No")
+boot_dta$pred_NKP <- ifelse(boot_dta$pred_NKP == 1, "Yes", "No")
 
 #change NKP to predictions
-newdata <- within(subdata, {NKP <- pred_NKP})
+newdata <- within(boot_dta, {NKP <- pred_NKP})
 
 pred_costs <- predict(reg_disease, newdata = newdata, type = "response")
-subdata$pred_costs <- NA
-subdata[names(pred_costs), "pred_costs"] <- pred_costs
+boot_dta$pred_costs <- NA
+boot_dta[names(pred_costs), "pred_costs"] <- pred_costs
 
-subdata$fit_costs <- NA
-subdata[names(fitted.values(reg_disease)), "fit_costs"] <-
+boot_dta$fit_costs <- NA
+boot_dta[names(fitted.values(reg_disease)), "fit_costs"] <-
   fitted.values(reg_disease)
 
-subdata$ac_disease <-
-  subdata$fit_costs - subdata$pred_costs
+boot_dta$ac_disease <-
+  boot_dta$fit_costs - boot_dta$pred_costs
+  
 }
 
-nuke.boot <- boot(subdata, reg.fun, R = 100)
+results <- by(boot_dta, boot_dta[,"id"], summary)
+              #, function(x) boot(boot_dta, reg.fun, R = n))
+
+nuke.boot <- boot(boot_dta, reg.fun, R = n)
+
+
 end_time <- Sys.time()
 end_time - start_time
 
